@@ -17,7 +17,6 @@ compatibility: >-
   inventory script; a manual fallback is documented. Web or documentation access materially
   improves generated skills but is not required.
 metadata:
-  generator: autoskill
   homepage: https://github.com/arendtio/autoskill
 ---
 
@@ -41,6 +40,14 @@ that list the agent cannot reliably demonstrate today is a gap.
 - Do not modify skills you did not generate. Project-level and third-party skills belong to someone
   else; write a new, distinctly scoped skill instead.
 - Keep the audit proportionate to the task. Producing zero skills is a frequent and correct outcome.
+
+## Repeat invocations within a plan
+
+A plan's later steps mostly need what its earlier steps needed. When AutoSkill has already run in
+this session, do not repeat the full audit: carry forward the earlier capability list and skill
+inventory, and assess only what the new step adds — a different artifact, a new tool, a domain the
+plan had not touched. If it adds nothing, say so in one line and stop. This is what keeps per-step
+invocation cheap enough to be worth doing.
 
 ## Workflow
 
@@ -171,6 +178,10 @@ candidates on that basis.
 The directory name must equal the frontmatter `name`. Never overwrite an existing skill directory:
 if the name is taken, extend that skill only when you generated it (its frontmatter carries
 `metadata.generator: autoskill`), and otherwise pick a more precise name.
+
+If no user-level directory is writable, do not discard the work. Say so in step 9 and inline the
+skill content there, so the user can install it and the host agent can still use the guidance for
+this task.
 
 ### 8. Re-inspect and validate
 
