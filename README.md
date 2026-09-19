@@ -1,22 +1,26 @@
 # AutoSkill
 
-An [Agent Skill](https://agentskills.io) that runs *before* a task and makes sure the agent has the
-specialized skills to execute it at an expert level.
+An [Agent Skill](https://agentskills.io) that runs *before* a task — and again
+after substantial execution — to raise the specialized capability the agent
+brings to the work.
 
-AutoSkill treats every task as a competency assessment: what would an examiner make the agent
-demonstrate to certify it can do this work exceptionally well? It decomposes the task into required
-capabilities, inspects the skills already installed, generates the ones that are missing or too
-shallow, writes them into the user-level skill directory, and returns a short list of skills to
-load.
+AutoSkill does not ask whether the agent can complete the task unaided. It asks
+whether specialized knowledge, methods, workflows, tools, scripts, or checks
+would materially improve quality, reliability, consistency, or efficiency. It
+decomposes the task, searches installed skills, estimates marginal value, and
+then either writes a short ephemeral method, writes a minimal **candidate**
+skill, or recommends an existing one.
 
-It never performs the task. Discovering, selecting, loading, and applying the recommended skills
-stays with the surrounding agent system.
+A generated skill starts as a hypothesis. AutoSkill promotes it into the
+persistent library only when later execution traces show positive marginal
+value. It never performs the user-visible task. Discovering, selecting,
+loading, and applying the recommended skills stays with the surrounding agent.
 
 ## Install
 
-Clone the repository into a skill directory your agent reads. The directory must be named
-`autoskill`, because the Agent Skills specification requires the directory name to match the
-skill's `name`.
+Clone the repository into a skill directory your agent reads. The directory
+must be named `autoskill`, because the Agent Skills specification requires the
+directory name to match the skill's `name`.
 
 ```bash
 # Claude Code and Claude apps
@@ -40,9 +44,11 @@ python3 ~/.claude/skills/autoskill/scripts/skill_inventory.py --validate ~/.clau
 
 ## Use
 
-Most agents activate AutoSkill on their own when a task looks specialized, because its description
-is written to trigger before non-trivial work. You can also invoke it explicitly — in Claude Code,
-`/autoskill` — before starting a task or before a step of a plan.
+Most agents activate AutoSkill on their own before non-trivial work, including
+tasks that look familiar, because its description is written to trigger on
+capability opportunities rather than on explicit "I need a skill" requests. You
+can also invoke it explicitly — in Claude Code, `/autoskill` — before starting,
+before a step of a plan, or after a run so it can inspect traces.
 
 A run ends with a recommendation like this:
 
@@ -50,30 +56,38 @@ A run ends with a recommendation like this:
 ## Skill readiness: migrate the billing service from Flask to FastAPI
 
 **Load before starting**
-- `migrating-wsgi-to-asgi` (new) — request/response translation, blocking-call detection, and the
-  test strategy for a mixed-stack cutover
-- `python-dependency-audits` (existing) — pinning and conflict resolution for the new stack
+- `migrating-wsgi-to-asgi` (candidate) — request/response translation, blocking
+  call detection, and the test strategy for a mixed-stack cutover
+- `python-dependency-audits` (existing) — pinning and conflict resolution
 
-**Gaps left open**
+**Ephemeral methods for this task only**
+- Vendor CSV column map — treat `amt` as minor units, drop `amt_orig`
+
+**After execution**
+Re-invoke AutoSkill with traces. Promote, revise, or discard candidates.
+
+**Not skill-worthy**
 - Writing the migration commits — routine work the agent already does reliably.
-
-No task work has been done. Proceed with the skills above loaded.
 ```
 
-Producing zero new skills is a normal outcome. AutoSkill only generates a skill when explicit
-procedural knowledge, domain expertise, quality criteria, or a specialized method would materially
-change the result.
+Producing zero new library skills is a normal outcome. AutoSkill generates a
+**candidate** only when the expected benefit of a reusable, evaluable capability
+beats the cost of extra context, rigidity, and staleness. When a method would
+help once but reuse is unclear, it stays ephemeral.
 
 ## Contents
 
 | Path | Purpose |
 | --- | --- |
-| `SKILL.md` | Invocation conditions, boundaries, and the nine-step workflow |
-| `references/authoring-skills.md` | Format rules and the depth standard every generated skill must pass |
-| `scripts/skill_inventory.py` | Read-only inventory of installed skills, and spec validation of one skill |
+| `SKILL.md` | Control plane: modes, opportunity scan, classification, recommend |
+| `references/authoring-skills.md` | Format, discovery contract, and design bar for new candidates |
+| `references/revision.md` | Trace inspection, promotion, discard, and library hygiene |
+| `evals/triggers.md` | Activation probes for AutoSkill itself |
+| `evals/cases.md` | Behavioral cases for revising AutoSkill |
+| `scripts/skill_inventory.py` | Inventory of installed skills, plus spec validation of one skill |
 
-There is no registry, database, or daemon. The filesystem skill directories are the registry, which
-is what the Agent Skills standard intends.
+There is no registry, database, or daemon. The filesystem skill directories are
+the registry, which is what the Agent Skills standard intends.
 
 ## The inventory script
 
@@ -88,20 +102,27 @@ python3 scripts/skill_inventory.py /path/to/other/skills
 python3 scripts/skill_inventory.py --validate /path/to/skill
 ```
 
-The listing scans `.agents/skills`, `.claude/skills`, and `.cursor/skills` from the working
-directory up to the repository root, and the same three under the home directory. Validation checks
-frontmatter conformance, name and directory agreement, body length, and whether bundled files and
-Markdown references actually resolve. It exits non-zero when it finds an error.
+The listing scans `.agents/skills`, `.claude/skills`, and `.cursor/skills` from
+the working directory up to the repository root, and the same three under the
+home directory. It prints AutoSkill lifecycle metadata when present and flags
+candidates still awaiting validation.
+
+Validation checks frontmatter conformance, name and directory agreement, body
+length, and whether bundled files and Markdown references actually resolve. It
+exits non-zero when it finds an error.
 
 Both modes are read-only.
 
 ## Quality standard
 
-A skill counts as adequate only when it enables the capability reliably, not when it merely exists.
-AutoSkill accepts an existing skill only if it is direct, operational, grounded in real standards
-and specifics, discriminating about what a good result looks like, checkable, and honest about
-failure modes. A superficially related skill that lacks the depth to execute well counts as a gap,
-because it stops the search without supplying the capability.
+Useful specialized capability per unit of context and cost is the objective,
+not skill count and not a complete first draft.
+
+An existing skill counts as coverage only when it enables the capability:
+direct, operational, grounded, discriminating, checkable, failure-aware, and
+fresh. A generated candidate must also have a precise discovery contract, a
+fragility-matched degree of freedom, risk-proportional verification, and eval
+probes. Fluent instructions are not evidence. Execution traces are.
 
 ## License
 
