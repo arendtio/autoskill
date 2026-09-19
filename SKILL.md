@@ -1,220 +1,338 @@
 ---
 name: autoskill
 description: >-
-  Audits and closes the agent's skill gaps before it starts work. Use at the start of any
-  non-trivial task and again before each substantial step of a multi-step plan — before writing,
-  designing, analyzing, implementing, reviewing, or producing any artifact — and especially when
-  the work touches a specialized domain, a specific output format, an unfamiliar tool or API, or a
-  professional quality bar. Use it proactively, even when the user never mentions skills and even
-  when the task looks familiar. It decomposes the task into required capabilities, inspects the
-  local and user-level skill directories, writes the missing skills into the user-level skill
-  directory, and returns a short list of skills to load. It never performs the task itself. Skip it
-  only for trivial one-step operations such as reading a file, answering a factual question, or
-  running a single known command.
+  Finds specialized knowledge, methods, workflows, tools, scripts, or checks
+  that would materially improve the current task, then creates or revises the
+  matching skills. Use at the start of any non-trivial work — even when the
+  task looks familiar and the user never mentions skills — before writing,
+  designing, analyzing, researching, implementing, reviewing, or producing an
+  artifact. Use again after substantial execution to inspect traces and promote,
+  revise, or discard candidates. Use when a subtask has an expert method,
+  fragile workflow, costly failure mode, specialized API, or deterministic
+  validation. It decomposes the task, searches existing skills, estimates
+  marginal value, writes minimal candidate or ephemeral skills, and returns
+  what to load. It never performs the task. Skip trivial one-step work such as
+  reading a file, answering a fact, or running a known command. Do not use it
+  merely because a task is complex.
 license: MIT
 compatibility: >-
-  Requires read/write access to the agent's skill directories. Python 3 enables the bundled
-  inventory script; a manual fallback is documented. Web or documentation access materially
-  improves generated skills but is not required.
+  Requires read/write access to the agent's skill directories. Python 3 enables
+  the bundled inventory script; a manual fallback is documented. Web or
+  documentation access materially improves generated skills but is not required.
 metadata:
   homepage: https://github.com/arendtio/autoskill
 ---
 
 # AutoSkill
 
-Run before a task, never instead of it. AutoSkill checks whether the agent already has the
-specialized skills to execute the upcoming task at an expert level, writes the ones that are
-missing, and hands back a short list of skills to load. The host agent does the loading and the
-work.
+Run before a task, and again after substantial execution. AutoSkill searches for
+specialized capabilities that would raise expected quality, reliability,
+consistency, or efficiency; writes the smallest justified candidate; and returns
+what to load. After the host has executed, it inspects traces and promotes,
+revises, or discards. The host agent does the loading and the work.
 
-Treat the task as a competency assessment: **what would an examiner make the agent demonstrate to
-certify that it can execute every relevant aspect of this task exceptionally well?** Every item on
-that list the agent cannot reliably demonstrate today is a gap.
+A generated skill is a hypothesis. Promote it only when execution shows positive
+marginal value.
+
+Do not ask only whether the task can be completed without a skill. Ask whether
+specialized knowledge, a method, a workflow, a tool, a script, or a check would
+materially change the outcome of any subtask.
+
+## Purpose
+
+Increase the host agent's useful specialized capability per unit of context,
+complexity, and execution cost. Close real capability gaps; do not accumulate
+instructions.
 
 ## Boundaries
 
-- Do not start the task. No task code, no task edits, no answer to the user's question. Stop at the
-  recommendation and let the host agent proceed.
-- Do not invoke AutoSkill recursively, and never write "run autoskill" into a generated skill.
-- Do not encode this particular task into a skill. Skills are reusable capabilities, not plans.
-- Do not modify skills you did not generate. Project-level and third-party skills belong to someone
-  else; write a new, distinctly scoped skill instead.
-- Keep the audit proportionate to the task. Producing zero skills is a frequent and correct outcome.
+- Do not start the task. No task code, no task edits, no answer to the user's
+  question. Stop at the recommendation and let the host agent proceed.
+- Do not invoke AutoSkill recursively, and never write "run autoskill" into a
+  generated skill.
+- Do not encode this particular task into a skill. Skills are reusable
+  capabilities, not plans.
+- Do not modify skills you did not generate. Project-level and third-party
+  skills belong to someone else; write a new, distinctly scoped skill instead.
+- Do not promote an untested candidate into the persistent library.
+- Do not write an ephemeral method into the skill directory.
+- Keep the audit proportionate. `No skill` and ephemeral methods are frequent,
+  correct outcomes.
 
-## Repeat invocations within a plan
+## When to use this skill
 
-A plan's later steps mostly need what its earlier steps needed. When AutoSkill has already run in
-this session, do not repeat the full audit: carry forward the earlier capability list and skill
-inventory, and assess only what the new step adds — a different artifact, a new tool, a domain the
-plan had not touched. If it adds nothing, say so in one line and stop. This is what keeps per-step
-invocation cheap enough to be worth doing.
+Use before non-trivial work, including tasks that look familiar. Use again after
+the host has executed with AutoSkill-created guidance. Trigger probes and
+near-misses are in [evals/triggers.md](evals/triggers.md); load that file only
+when checking activation or revising AutoSkill itself, not during a normal
+run. Task-level eval cases are in [evals/cases.md](evals/cases.md).
+
+**Do not use when** the request is a single known operation with no specialized
+method, tool semantics, or quality bar — reading a file, answering a fact,
+running one familiar command.
+
+## Mode
+
+Pick one. Do not run a full pre-task audit when a narrower mode applies.
+
+**Post-execution.** The user's task, or a substantial completed slice of it,
+already ran with AutoSkill-created candidates or ephemeral methods. Read
+[references/revision.md](references/revision.md) and revise from traces. Do not
+rescan the original task from scratch. Do not wait until a later session if the
+traces are in context now.
+
+**Mid-plan.** AutoSkill already ran in this session and the next step adds at
+most a new artifact, tool, or domain. Carry forward the earlier capability list
+and inventory; assess only the delta. If it adds nothing, say so in one line
+and stop. Do not do a full revision between plan steps; unvalidated candidates
+stay candidates until the task (or a substantial slice) has a trace.
+
+**Pre-task.** Otherwise run the workflow below.
 
 ## Workflow
 
 ```
-- [ ] 1. Decompose the task into activities
-- [ ] 2. Derive the capability requirements
+- [ ] 1. Decompose the task into subtasks
+- [ ] 2. Scan for capability opportunities
 - [ ] 3. Inventory the available skills
-- [ ] 4. Assess coverage against the sufficiency bar
-- [ ] 5. Decide what is worth generating
-- [ ] 6. Research and write the missing skills
-- [ ] 7. Persist to the user-level skill directory
-- [ ] 8. Re-inspect and validate
-- [ ] 9. Recommend
+- [ ] 4. Estimate marginal value and classify
+- [ ] 5. Author the smallest useful candidate
+- [ ] 6. Persist by class
+- [ ] 7. Validate
+- [ ] 8. Recommend
 ```
 
-### 1. Decompose the task into activities
+### 1. Decompose the task into subtasks
 
-Cover the whole lifecycle of the work, not just the obvious middle:
+Cover the whole lifecycle, not just the obvious middle:
 
-- **Intake** — interpreting the request, its constraints, and what "done" means here
+- **Intake** — constraints, hidden requirements, what "done" means
 - **Domain reasoning** — the subject matter the work is actually about
-- **Method** — the procedure a practitioner follows to produce this kind of result
-- **Tooling** — the specific tools, libraries, APIs, and formats involved
-- **Production** — building the concrete artifact, in its own genre and conventions
-- **Verification** — how correctness and quality are established before handoff
-- **Communication** — how the result is presented, documented, or handed over
+- **Method** — the procedure a practitioner follows
+- **Tooling** — specific tools, APIs, formats, and their surprising semantics
+- **Production** — the artifact, in its own genre
+- **Verification** — how correctness is established
+- **Communication** — presentation, documentation, handoff
 
-For each activity ask what separates a competent attempt from an expert one. That difference is
-where a skill can change the outcome; where there is no difference, there is nothing to add.
+For each subtask note knowledge, method, tools, constraints, likely failures,
+what can be made deterministic, and how success is checked. Also look across
+subtasks for research method, verification, consistency, and tool orchestration.
 
-### 2. Derive the capability requirements
+### 2. Scan for capability opportunities
 
-For each activity with a real competent-to-expert gap, state what the agent must be able to do.
-Use these categories as prompts, not as a form to fill in:
+A skill is worth considering when it adds information or structure the model
+would not reliably apply at the right time. It is not a device for making the
+model "smarter," and complexity alone is not a reason to write one.
 
-| Category | Question it answers |
+Ask of each subtask:
+
+- What would a specialist do here that a strong generalist would miss or do
+  unreliably?
+- Is there an established method, checklist, taxonomy, heuristic, or check?
+- Can a probabilistic step be replaced by a script or validator?
+- Which failure class is likely, and could a skill catch it systematically?
+- Will this capability be needed again in this task or later?
+
+Favor a skill when one or more hold:
+
+| Signal | Why it matters |
 | --- | --- |
-| Procedure | What is the actual step sequence, and where are its decision points? |
-| Domain knowledge | Which facts, models, or conventions must be known and cannot be inferred? |
-| Tooling | Which exact tools, APIs, and flags, and what is surprising about them? |
-| Standards | Which external specs, regulations, or house rules define correct output? |
-| Output expertise | What makes this artifact well-formed within its own genre? |
-| Quality criteria | How is a good result told apart from a plausible-looking bad one? |
-| Failure modes | What goes wrong for non-experts, and how does it show up early? |
+| Specialized or organization-specific knowledge | Model knowledge is incomplete or stale |
+| Established expert method | Specialists follow a process, not generic reasoning |
+| Fragile multi-step workflow | Order, preconditions, or handoffs are load-bearing |
+| Easy-to-forget constraints | Explicit procedure changes behavior |
+| Deterministic operation | A script beats regenerated reasoning |
+| Specialized API, format, or toolchain | Hidden semantics and edge cases |
+| Explicit acceptance criteria | "Done" must be operationalized |
+| Costly mistakes | A validator has high expected value |
+| Recurring failure in prior traces | The gap is already observed |
+| Reuse or required consistency | Learning cost amortizes |
 
-Write each requirement as a capability statement, not a topic label. "Write a Debian changelog
-entry that passes lintian" is a requirement; "packaging" is not.
+Six useful shapes, often as separate narrow skills rather than one bundle:
+domain knowledge, method, workflow, tool use, deterministic script, and
+verification.
 
 ### 3. Inventory the available skills
 
-Run the bundled script from this skill's directory (paths in this file are relative to it):
+Run the bundled script from this skill's directory (paths in this file are
+relative to it):
 
 ```bash
 python3 scripts/skill_inventory.py
 ```
 
-It scans the project-level skill directories from the working directory up to the repository root,
-scans the user-level skill directories, and prints each skill's scope, name, description, size,
-bundled resources, and path, followed by the candidate user-level write targets for step 7.
+It scans project-level skill directories from the working directory up to the
+repository root, scans user-level skill directories, and prints each skill's
+scope, name, description, lifecycle, size, bundled resources, and path, followed
+by candidate user-level write targets for step 6. It also flags AutoSkill
+candidates still awaiting validation.
 
-Without Python, list the same directories with `ls` and read the frontmatter of each `SKILL.md`:
-`.agents/skills/`, `.claude/skills/`, and `.cursor/skills/` under the working directory and its
-ancestors, and the same three under the home directory.
+Without Python, list the same directories with `ls` and read the frontmatter of
+each `SKILL.md`: `.agents/skills/`, `.claude/skills/`, and `.cursor/skills/`
+under the working directory and its ancestors, and the same three under the home
+directory.
 
-### 4. Assess coverage against the sufficiency bar
+Search existing skills before creating a new one. Read the `SKILL.md` of every
+plausible candidate; a matching name is not evidence of depth.
 
-Read the `SKILL.md` of every plausible candidate before judging it. A matching name or an
-encouraging description is not evidence of depth.
+An existing skill covers a need only when it is **direct**, **operational**,
+**grounded** in real specifics, **discriminating** about good output,
+**checkable**, **failure-aware**, and **fresh** enough that it will not apply
+stale or version-incompatible guidance. Partial coverage is a gap: a skill that
+gestures at a capability without enabling it stops the search.
 
-A skill covers a requirement only when all six hold:
+If an AutoSkill-generated skill is the partial match, revise that skill rather
+than minting a sibling. If it belongs to someone else, write a distinctly
+scoped new candidate.
 
-1. **Direct** — it targets that capability, not a neighbouring one.
-2. **Operational** — a competent agent could follow it without inventing the method.
-3. **Grounded** — it carries the real standards, formats, commands, or API details, rather than
-   advice that would be true of any task.
-4. **Discriminating** — it says how to recognize a good result, in observable terms.
-5. **Checkable** — it supplies verification steps or review criteria wherever the domain allows one.
-6. **Failure-aware** — it names the mistakes that actually occur here and their early symptoms.
+### 4. Estimate marginal value and classify
 
-Mark each requirement **Covered**, **Partial**, or **Missing**. Partial is a gap: a skill that
-gestures at a capability without enabling it is worse than none, because it stops the search.
+Do not create a skill merely because the task is complex, and do not skip one
+merely because the agent could attempt the work unaided.
 
-### 5. Decide what is worth generating
+Estimate, qualitatively:
 
-Generate only when all three are true:
+```
+value ≈ P(relevant gap) × error cost × improvement × reuse
+      − context − extra steps − rigidity − staleness − creation − overlap
+```
 
-- getting this capability wrong would visibly degrade the result
-- explicit procedure, domain knowledge, standards, or quality criteria would change what the agent
-  actually produces
-- the capability recurs beyond this one task
+This is a decision heuristic, not a score to compute.
 
-Skip when any of these apply:
+Classify each opportunity:
 
-- it is routine work the agent already does reliably — reading files, ordinary git use, writing a
-  loop, calling a well-known library
-- everything needed is already stated in the task prompt
-- the content would amount to general good practice with no domain substance
-- an existing skill already clears the bar in step 4
+**No skill.** The base model or an existing adequate skill is better and cheaper
+than more instructions. Routine work belongs here: reading files, ordinary git
+use, writing a loop, calling a well-known library, or following instructions
+already in the prompt.
 
-Prefer few and deep. One to three new skills is the normal outcome. More than five usually means
-step 2 produced topics rather than capabilities — go back and merge them into coherent units.
+**Ephemeral micro-skill.** A specialized method would help *this* task, but
+reuse is unclear or the value is not yet worth a library entry. Write a short
+working method in the recommendation only. Do not persist it.
 
-### 6. Research and write the missing skills
+**Candidate.** High expected value, one coherent reusable capability, and
+evaluable success. Write a minimal skill to disk as `lifecycle: candidate`.
+It is not persistent until post-execution revision promotes it.
 
-Ground each skill in real sources before writing a line of it. Check, in order of value: the
-authoritative documentation or specification for the domain, a documentation MCP server or web
-access if either is available, vendored docs in the repository, and the repository's own code,
-configs, review history, and past fixes. Skills synthesized from general model knowledge alone come
-out vague, which is the failure this whole workflow exists to prevent. When no authoritative source
-is reachable, narrow the skill to what can be stated precisely and leave the rest out.
+Prefer few and focused. One to three new candidates or micro-skills is the
+normal outcome. More than five usually means step 1 produced topics rather than
+capabilities — merge them. Prefer composable specialists
+(`source-quality-assessment`) over exhaustive masters
+(`general-research-master-skill`). A candidate should contain at most three
+bundled modules.
 
-Then read [references/authoring-skills.md](references/authoring-skills.md) and follow it. It
-carries the format rules, the body structure, the depth standard, and the pre-flight checks that
-every generated skill has to pass.
+### 5. Author the smallest useful candidate
 
-### 7. Persist to the user-level skill directory
+Ground each candidate in real sources before writing a line of it. Check, in
+order of value: the authoritative documentation or specification, a
+documentation MCP server or web access if either is available, vendored docs,
+and the repository's own code, configs, review history, and past fixes. Skills
+synthesized from general model knowledge alone come out vague. When no
+authoritative source is reachable, narrow the skill to what can be stated
+precisely and leave the rest out.
 
-Write to the user-level directory your host actually reads:
+Build evaluation before expanding the skill. Identify the concrete failure the
+candidate is meant to prevent, write compact trigger and task probes under
+`evals/`, then write only as much `SKILL.md` as that gap requires.
+
+Then read [references/authoring-skills.md](references/authoring-skills.md) and
+follow it. It carries the format rules, the discovery contract, degrees of
+freedom, the control-plane body, and the pre-flight checks. Include only
+information that changes execution: mechanisms over exhortations, explicit
+rules over example-only guidance.
+
+### 6. Persist by class
+
+Ephemeral methods stay in the recommendation.
+
+Write candidates to the user-level directory your host actually reads:
 
 - Claude Code and Claude apps: `~/.claude/skills/<name>/SKILL.md`
 - Cursor: `~/.cursor/skills/<name>/SKILL.md`
-- any other client: `~/.agents/skills/<name>/SKILL.md`, the cross-client convention
+- any other client: `~/.agents/skills/<name>/SKILL.md`
 
-When the host is unclear, use the user-level directory that already holds the skills you
-inventoried in step 3 — that is demonstrably a directory this host reads. The script ranks the
-candidates on that basis.
+When the host is unclear, use the user-level directory that already holds the
+skills you inventoried in step 3. The script ranks the candidates on that basis.
 
-The directory name must equal the frontmatter `name`. Never overwrite an existing skill directory:
-if the name is taken, extend that skill only when you generated it (its frontmatter carries
-`metadata.generator: autoskill`), and otherwise pick a more precise name.
+The directory name must equal the frontmatter `name`. Set
+`metadata.generator: autoskill` and `metadata.lifecycle: candidate`. Never
+overwrite an existing skill directory: if the name is taken, extend that skill
+only when you generated it, and otherwise pick a more precise name.
 
-If no user-level directory is writable, do not discard the work. Say so in step 9 and inline the
-skill content there, so the user can install it and the host agent can still use the guidance for
-this task.
+If no user-level directory is writable, do not discard the work. Say so in
+step 8 and inline the candidate there, so the user can install it and the host
+can still use the guidance for this task.
 
-### 8. Re-inspect and validate
+### 7. Validate
 
-Validate every skill you wrote, then re-run the inventory:
+Validate every candidate you wrote, then re-run the inventory:
 
 ```bash
 python3 scripts/skill_inventory.py --validate <target-dir>/<name>
 python3 scripts/skill_inventory.py
 ```
 
-Fix everything the validator reports. Then confirm by reading, because the validator only checks
-form:
+Fix everything the validator reports. Then confirm by reading:
 
-- each new skill still clears the step 4 bar when read as though someone else wrote it
-- descriptions are distinct enough that the host can tell the skills apart
+- the candidate still looks like a hypothesis aimed at one gap, not a textbook
+- the description would fire for this task, including when the user never names
+  the skill, and would not fire on important near-misses
+- descriptions of new candidates are distinct from each other and from existing
+  skills
 - no new skill shadows a project-level skill of the same name
 
-### 9. Recommend
+Do not treat a fluent SKILL.md as evidence that the skill works. Form checks
+happen here; behavioral checks happen after execution.
 
-Report and stop. Keep it to the skills that matter for the task at hand:
+### 8. Recommend
+
+Report and stop. Keep it to what the host needs for this task:
 
 ```markdown
 ## Skill readiness: <task in one line>
 
 **Load before starting**
-- `<skill-name>` (existing) — <the capability it supplies for this task>
-- `<skill-name>` (new) — <the capability it supplies for this task>
+- `<skill-name>` (existing) — <capability it supplies here>
+- `<skill-name>` (candidate) — <gap it is hypothesized to close>
 
-**Gaps left open**
-- <capability> — <why no skill was warranted>
+**Ephemeral methods for this task only**
+- <name> — <the short working method>
 
-No task work has been done. Proceed with the skills above loaded.
+**After execution**
+Re-invoke AutoSkill with traces. Compare outcomes and cost against the no-skill
+baseline implied by the evals. Promote, revise, or discard candidates. Do not
+keep a candidate that added cost without improving the result.
+
+**Not skill-worthy**
+- <subtask> — <why no skill or why ephemeral was enough>
 ```
 
-Omit the gaps section when there are none. If nothing was missing, say so in one line rather than
+Omit empty sections. If nothing was missing, say so in one line rather than
 manufacturing a report.
+
+## Failure handling
+
+- Inventory script missing or Python unavailable: list the skill directories by
+  hand as in step 3.
+- No writable user-level directory: inline the candidate in the recommendation.
+- Authoritative sources unreachable: narrow the candidate to what can be stated
+  precisely. Do not pad with general knowledge.
+- Traces missing in post-execution mode: state what evidence is required and
+  stop. Do not promote on speculation.
+
+## Resources
+
+Load only the file the current mode needs:
+
+- [references/authoring-skills.md](references/authoring-skills.md) — writing a
+  candidate (step 5)
+- [references/revision.md](references/revision.md) — post-execution traces
+- [scripts/skill_inventory.py](scripts/skill_inventory.py) — steps 3 and 7
+- [evals/triggers.md](evals/triggers.md) and [evals/cases.md](evals/cases.md) —
+  only when testing AutoSkill's own activation or revising AutoSkill
+
+## Final principle
+
+Search aggressively for specialization opportunities. Write minimally. Treat
+every new skill as a candidate until behavior beats the baseline. Delete and
+simplify as readily as you add.

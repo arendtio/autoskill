@@ -8,6 +8,7 @@ Usage:
 The listing scans the project-level skill directories from the working directory up to the
 repository root, plus the user-level skill directories, and ends with the candidate user-level
 directories ranked as write targets. Extra directories may be given as positional arguments.
+When present, AutoSkill lifecycle metadata is printed and unvalidated candidates are flagged.
 
 Read-only in both modes; nothing is created, modified, or cached.
 """
@@ -212,6 +213,18 @@ def command_list(extra: list[Path]) -> int:
         generator = skill.frontmatter.get("metadata.generator")
         if generator:
             print(f"    generator: {generator}")
+        lifecycle = skill.frontmatter.get("metadata.lifecycle")
+        if lifecycle:
+            print(f"    lifecycle: {lifecycle}")
+        last_validated = skill.frontmatter.get("metadata.last_validated")
+        if last_validated:
+            print(f"    last_validated: {last_validated}")
+        freshness = skill.frontmatter.get("metadata.freshness_sensitive")
+        if freshness:
+            print(f"    freshness_sensitive: {freshness}")
+        tested_against = skill.frontmatter.get("metadata.tested_against")
+        if tested_against:
+            print(f"    tested_against: {tested_against}")
         resources = bundled_resources(skill.directory)
         if resources:
             print(f"    resources: {', '.join(resources)}")
@@ -221,6 +234,8 @@ def command_list(extra: list[Path]) -> int:
         if len(description) > 400:
             description = description[:400] + " ..."
         print(f"    description: {description}")
+
+    _print_hygiene(skills)
 
     print("\nUser-level write targets (best first)")
     for scope, root in _ranked_targets(roots, skills):
@@ -234,6 +249,39 @@ def command_list(extra: list[Path]) -> int:
         "holds skills is evidence that this host reads it."
     )
     return 0
+
+
+def _print_hygiene(skills: list[Skill]) -> None:
+    """Flag AutoSkill candidates that still need execution evidence."""
+    generated = [s for s in skills if s.frontmatter.get("metadata.generator") == "autoskill"]
+    if not generated:
+        return
+
+    candidates = [
+        s
+        for s in generated
+        if (
+            s.frontmatter.get("metadata.lifecycle", "candidate") == "candidate"
+            or not s.frontmatter.get("metadata.lifecycle")
+        )
+    ]
+    stale = [
+        s
+        for s in generated
+        if s.frontmatter.get("metadata.freshness_sensitive") == "true"
+        and not s.frontmatter.get("metadata.last_validated")
+    ]
+    persistent = sum(
+        1 for s in generated if s.frontmatter.get("metadata.lifecycle") == "persistent"
+    )
+    print("\nAutoSkill library hygiene")
+    print(f"  generated: {len(generated)}  persistent: {persistent}  candidate: {len(candidates)}")
+    if candidates:
+        names = ", ".join(s.name for s in candidates)
+        print(f"  awaiting validation: {names}")
+    if stale:
+        names = ", ".join(s.name for s in stale)
+        print(f"  freshness-sensitive, never validated: {names}")
 
 
 def _ranked_targets(roots: list[tuple[str, Path]], skills: list[Skill]) -> list[tuple[str, Path]]:
@@ -309,6 +357,23 @@ def command_validate(target: Path) -> int:
         )
     if re.match(r"^\s*(i |i'|you can|this skill lets you)", description, re.IGNORECASE):
         warnings.append("`description` should be written in third person")
+    if description and "do not use" not in description.lower() and "skip " not in description.lower():
+        warnings.append(
+            "`description` may lack an exclusion (near-misses where the skill should not load)"
+        )
+
+    generator = skill.frontmatter.get("metadata.generator")
+    lifecycle = skill.frontmatter.get("metadata.lifecycle", "")
+    if generator == "autoskill" and lifecycle not in ("candidate", "persistent", "ephemeral"):
+        warnings.append(
+            "generated skill should set metadata.lifecycle to candidate, persistent, or ephemeral"
+        )
+    if lifecycle == "candidate":
+        evals_dir = directory / "evals"
+        if not evals_dir.is_dir() or not any(evals_dir.iterdir()):
+            warnings.append(
+                "candidate skill has no evals/; trigger and task probes belong there before expansion"
+            )
 
     body_lines = len(skill.body.splitlines())
     if body_lines > MAX_BODY_LINES:
@@ -325,14 +390,19 @@ def command_validate(target: Path) -> int:
         if not path.exists():
             errors.append(f"referenced file {link!r} does not exist in the skill directory")
 
-    for sub in ("references", "scripts", "assets"):
+    for sub in ("references", "scripts", "assets", "evals"):
         subdir = directory / sub
         if subdir.is_dir():
             for path in sorted(subdir.rglob("*")):
-                if path.is_file():
-                    relative = path.relative_to(directory).as_posix()
-                    if relative not in skill.body:
-                        warnings.append(f"bundled file {relative!r} is never referenced in SKILL.md")
+                if not path.is_file():
+                    continue
+                relative = path.relative_to(directory)
+                if any(part.startswith(".") or part == "__pycache__" for part in relative.parts):
+                    continue
+                if relative.as_posix() not in skill.body:
+                    warnings.append(
+                        f"bundled file {relative.as_posix()!r} is never referenced in SKILL.md"
+                    )
 
     status = "FAIL" if errors else "PASS"
     print(f"{status} {directory}")

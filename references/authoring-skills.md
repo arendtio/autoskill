@@ -1,225 +1,326 @@
 # Authoring skills that meet the AutoSkill bar
 
-Read this before writing the first generated skill of a run. It covers the format the Agent Skills
-standard requires, and the depth standard that separates a skill worth loading from a file that
-merely exists.
+Read this before writing the first generated candidate of a run. It covers the
+format the Agent Skills standard requires, and the design standard that
+separates a skill worth loading from extra context that does not change
+behavior.
+
+Load [revision.md](revision.md) instead when inspecting traces after execution.
 
 ## Contents
 
 - Format requirements
+- Discovery contract
 - Scope: one coherent capability
+- Degrees of freedom
 - Body structure
-- Depth: what makes an instruction operational
-- Levels of execution
+- Rules, examples, and mechanisms
 - Quality criteria and verification
 - When to add bundled files
+- Freshness
+- Evaluation files
 - Anti-patterns
 - Pre-flight checklist
 
 ## Format requirements
 
-A skill is a directory whose name equals the frontmatter `name`, containing a `SKILL.md` with YAML
-frontmatter and a Markdown body.
+A skill is a directory whose name equals the frontmatter `name`, containing a
+`SKILL.md` with YAML frontmatter and a Markdown body.
 
 ```markdown
 ---
-name: reviewing-terraform-plans
+name: source-quality-assessment
 description: >-
-  Reviews `terraform plan` output for destructive and drift-inducing changes before apply. Use
-  when a plan needs sign-off, when a change touches state, or when a user asks whether a plan is
-  safe to apply.
+  Evaluates the reliability, authority, independence, and evidentiary value of
+  sources during research and claim verification. Use when selecting sources,
+  checking citations, or doing deep research — including when the user never
+  asks for source evaluation by name. Do not use it merely to retrieve or
+  summarize a source.
 metadata:
   generator: autoskill
+  lifecycle: candidate
+  created: "2026-09-19"
+  last_validated: ""
+  freshness_sensitive: "false"
 ---
 
-# Reviewing Terraform plans
+# Source quality assessment
 ...
 ```
 
 | Field | Required | Rules |
 | --- | --- | --- |
 | `name` | yes | 1–64 characters; lowercase letters, digits, and hyphens only; no leading, trailing, or doubled hyphen; equals the directory name; avoid the reserved words `claude` and `anthropic` |
-| `description` | yes | 1–1024 characters; third person; states what the skill does *and* when to use it |
+| `description` | yes | 1–1024 characters; third person; the discovery contract below |
 | `license` | no | A license name, or the name of a bundled license file |
 | `compatibility` | no | ≤500 characters; only when the skill has real environment requirements |
-| `metadata` | no | String-to-string map; always set `generator: autoskill` on generated skills |
+| `metadata` | no | String-to-string map. Generated skills always set `generator: autoskill` and `lifecycle: candidate` until revision promotes them. Optional: `created`, `last_validated`, `freshness_sensitive`, `tested_against` |
 | `allowed-tools` | no | Experimental and client-specific; omit unless there is a concrete reason |
 
-Body rules: keep it under 500 lines and roughly 5,000 tokens, use forward slashes in every path,
-reference bundled files with paths relative to the skill directory, and keep those references one
-level deep from `SKILL.md`.
+Body rules: keep it under 500 lines and roughly 5,000 tokens, use forward
+slashes in every path, reference bundled files with paths relative to the skill
+directory, and keep those references one level deep from `SKILL.md`.
 
-**Naming.** Use a gerund phrase (`migrating-postgres-schemas`) or a precise noun phrase
-(`terraform-plan-review`). The name should identify the capability, so `helper`, `utils`, `docs`,
-and `data` are all too vague to be usable.
+**Naming.** Use a gerund phrase (`migrating-postgres-schemas`) or a precise noun
+phrase (`terraform-plan-review`). The name should identify the capability, so
+`helper`, `utils`, `docs`, and `data` are all too vague to be usable.
 
-**Description.** This field is the only thing the host sees until the skill activates, so it
-carries the entire triggering burden. Write what the skill does, then when to reach for it,
-including the vocabulary a user would actually use and the cases where the need is implied rather
-than named. Lean slightly pushy: agents under-trigger skills far more often than they over-trigger
-them. Stay in third person; a description written as "I can help you…" degrades matching.
+## Discovery contract
+
+`description` is the routing contract. It is in the host's context for every
+skill and is the only thing the host sees until activation. Optimize for recall
+*and* precision.
+
+It must state:
+
+1. **Capability** — what the skill enables
+2. **Trigger** — when to use it
+3. **Implicit trigger** — cases where it is useful even though the user never
+   names it
+4. **Exclusion** — important near-misses where it should *not* load
+
+Lean slightly pushy on implicit triggers: agents under-activate useful skills
+more often than they over-activate them. Stay in third person; "I can help
+you…" degrades matching.
 
 ## Scope: one coherent capability
 
-Scope a skill the way you would scope a function. Too narrow and several skills must load for one
-task, competing for attention. Too broad and it cannot be activated precisely, so it loads for work
-it does not help with.
+Scope a skill the way you would scope a function. Too narrow and several skills
+must load for one task, competing for attention. Too broad and it cannot be
+activated precisely.
 
-The test: state what the skill does in one sentence without using "and also". Querying a warehouse
-and formatting the results is one capability; querying it and administering it is two.
+The test: state what the skill does in one sentence without using "and also".
+Querying a warehouse and formatting the results is one capability; querying it
+and administering it is two.
+
+Prefer a small composable skill over an exhaustive pack. If the body is growing
+into a textbook, split it or move rarely needed detail into `references/`.
+
+Do not teach the model what it already reliably knows. Every paragraph must
+change execution.
+
+## Degrees of freedom
+
+Match instruction precision to how narrow the corridor of correct behavior is.
+
+| Fragility | What to write |
+| --- | --- |
+| Open-ended | Principles, heuristics, decision criteria |
+| Semi-structured | Preferred workflow, one default, explicit branches |
+| Fragile | Exact sequence, preconditions, guardrails, validators |
+| Deterministic | Script or tool; almost no natural-language discretion |
+
+Do not over-constrain work that needs judgment. Do not leave a fragile or
+deterministic operation to open-ended prose.
 
 ## Body structure
 
-Adapt these sections to the domain — a skill about a rendering pipeline and a skill about
-regulatory writing need different shapes — but every generated skill needs the substance behind
-them.
+`SKILL.md` is a control plane, not a textbook. Adapt section names to the
+domain, but every generated candidate needs the substance behind them.
 
 ```markdown
 # <Title>
 
-<One or two sentences: the capability this confers, and the shape of a good result.>
+## Purpose
+<One to three sentences: the measurable behavioral change this skill should
+produce. Not "helps with research" but "forces claim-to-source mapping and
+contradiction checks before synthesis.">
 
 ## When to use this skill
-<The situations it applies to, and the adjacent situations it does not cover.>
+<Concrete triggering situations.>
 
-## Method
-<Numbered steps. Each step says what to do and which decision it resolves.>
+## Do not use when
+<Important near-misses. Reduces collisions with neighbouring skills.>
 
-## <Domain sections>
-<The standards, formats, commands, API details, and conventions the agent cannot derive.
-Name them concretely. This is the part that makes the skill worth its tokens.>
+## Preconditions
+<Inputs, dependencies, permissions, or assumptions that must already be true.>
 
-## Quality bar
-<What separates a competent result from an excellent one, in observable terms.>
+## Core workflow
+<The minimum reliable sequence. Numbered. Each step resolves a decision.>
+
+## Decision points
+<IF/THEN branches where execution actually differs. Include the failure path,
+not only the happy path.>
+
+## Default
+<One recommended approach. Name at most one alternative and the condition that
+selects it.>
+
+## Failure handling
+<What to do when inputs, tools, or assumptions fail.>
 
 ## Verification
-<Checks to run before calling the work done, each with the signal that means failure.>
+<Observable completion criteria. Prefer a deterministic validator. Keep checks
+proportional to uncertainty, importance, and error cost.>
 
-## Failure modes
-<The mistakes that actually happen here, each with its early symptom and its correction.>
+## Resources
+<When to load each bundled file. Never "see references/ for details.">
+
+## Freshness
+<What goes stale, and how to refresh or revalidate it. Omit when nothing dated.>
 ```
 
-## Depth: what makes an instruction operational
+Gotchas that defy reasonable assumptions belong in `SKILL.md` itself: the
+endpoint that returns 200 while the database is down, the field named three
+things across three services, the flag whose default changed. The agent cannot
+know to go looking for them.
 
-Every instruction should be followable without further invention. Compare:
+## Rules, examples, and mechanisms
+
+Write in this order: **rule → procedure → constraints → verification →
+examples**.
+
+State core behavior as explicit rules. Examples clarify style, output shape,
+edge cases, and hard decisions. They do not replace the rule. Prefer examples
+taken from validated executions over invented demonstrations.
+
+Do not rely on motivational language: "be extremely careful", "make no
+mistakes", "think harder", "this is very important", role-play, CAPS LOCK, or
+reward rhetoric. Those are testable prompt candidates at best, not process
+knowledge. Replace them with mechanisms.
 
 ```markdown
-<!-- Not an instruction: the agent still has to invent the rule -->
-Validate the input rows before aggregating.
+<!-- Exhortation: not an instruction -->
+Make sure all requirements are satisfied.
 
-<!-- Operational: states the rule, the threshold, and the reason -->
-Drop rows where `amount` is negative before aggregating. The upstream export emits refunds as
-separate negative rows *and* reverses the original, so keeping both double-counts the refund.
+<!-- Mechanism -->
+Extract the acceptance criteria, map each one to an artifact, and run the
+validator before completion.
+
+<!-- Exhortation -->
+Carefully inspect the generated JSON.
+
+<!-- Mechanism -->
+1. Write result.json.
+2. Run `scripts/validate_schema.py result.json`.
+3. If it fails, repair only the reported violations.
+4. Re-run. Do not finish until it passes or a hard blocker is recorded.
 ```
 
-What raises depth:
+Give a default, not a menu. Listing four equal options transfers the decision
+back to the agent.
 
-- **Explain why.** Reasoning survives contexts the author did not anticipate; a bare directive does
-  not. Models follow "do X, because Y causes Z" more reliably than "ALWAYS do X".
-- **Use real names.** Exact commands and flags, library and function names, field names, spec
-  section numbers, file paths, thresholds. Justify any number you state — an unexplained constant
-  is one the agent cannot adapt.
-- **Give a default, not a menu.** Pick the approach that is right most of the time, then name the
-  one alternative and the condition that selects it. Listing four equal options transfers the
-  decision back to the agent, which is the thing the skill was supposed to settle.
-- **Capture gotchas.** The highest-value content is usually the set of facts that defy reasonable
-  assumptions: the endpoint that returns 200 while the database is down, the field named three
-  different things across three services, the flag whose default changed. These belong in
-  `SKILL.md` itself, because the agent cannot know to go looking for them.
-- **Cut what the model knows.** Do not explain what a PDF is, how HTTP works, or why tests matter.
-  Ask of each paragraph whether the agent would get this wrong without it; if not, delete it.
-- **Avoid dating the content.** Write a "current method" section and, if history matters, a short
-  "older patterns" note. Do not write instructions that hinge on the reader's calendar.
-
-## Levels of execution
-
-Where a domain has a genuine ladder of practice, make it explicit — it tells the agent what to
-reach for when the situation allows, and what is enough when it does not.
-
-```markdown
-## Levels
-
-**Baseline** — <what any correct execution must include>
-**Advanced** — <what a specialist adds, and the conditions that make it worthwhile>
-**Exceptional** — <what distinguishes the top of the field, and its cost>
-```
-
-Only include this when the ladder is real. Manufacturing tiers for a capability that is simply
-either done right or not adds tokens and invites over-engineering.
+Explain why when the reason is not obvious. Models follow "do X, because Y
+causes Z" more reliably than "ALWAYS do X". Use real names: commands, flags,
+functions, fields, spec sections, paths, thresholds. Justify any number you
+state.
 
 ## Quality criteria and verification
 
-State the quality bar in terms someone could check, not in adjectives. "Reads well" is unusable;
-"every claim traces to a cited source, and no paragraph runs past five sentences" is checkable.
+State the quality bar in terms someone could check. "Reads well" is unusable;
+"every claim traces to a cited source, and no paragraph runs past five
+sentences" is checkable.
 
-Where a mechanical check exists — a linter, schema, type checker, validator, test suite — give the
-exact command and say what its output means, then wire it into a loop:
+Where a mechanical check exists, give the exact command, say what its output
+means, and wire it into a repair loop. Where none exists, supply a review
+checklist of specific statements. For batch or destructive work, use
+plan-validate-execute.
 
-```markdown
-## Verification
+Keep verification **risk-proportional**. Targeted checks on uncertain, costly,
+or load-bearing claims. Not "verify everything three times." Excessive
+verification is a common way skills make agents worse: extra steps, delayed
+completion, and new failure modes.
 
-1. Run `lintian --pedantic ../<pkg>_<version>_all.deb`.
-2. Treat any `E:` line as blocking and any `W:` line as needing a justification in the changelog.
-3. Fix and re-run. Only proceed when no `E:` lines remain.
-```
-
-Where no mechanical check exists, supply a review checklist of specific, verifiable statements. For
-batch or destructive work, use plan-validate-execute: have the agent write its intended changes to
-a structured intermediate file, check that file against a source of truth, and only then apply it.
+Ask of every instruction: can this be a script? Parsing, schema checks, math,
+deduplication, conversion, and other exact operations should not be re-reasoned
+in prose each run.
 
 ## When to add bundled files
 
-Default to a single `SKILL.md`. Add files only for a concrete reason:
+Default to a single `SKILL.md`. Add files only for a concrete reason, and say
+*when* to open each one.
 
-- `references/` — material that would push `SKILL.md` past ~500 lines, or that is needed in only
-  one branch of the workflow. Say *when* to open each file: "read `references/api-errors.md` when
-  the API returns a non-2xx status" beats "see references/ for details". Give any reference over
-  100 lines a table of contents, since the agent may preview it rather than read it whole.
-- `scripts/` — a deterministic operation the agent would otherwise reimplement each run. Scripts
-  must handle their own error cases with useful messages rather than deferring to the agent, and
-  must document their dependencies. State whether the agent should execute the script or read it.
+- `references/` — material that would push `SKILL.md` past ~500 lines, or that
+  is needed in only one branch. Give any reference over 100 lines a table of
+  contents. Keep references one level deep.
+- `scripts/` — a deterministic operation the agent would otherwise reimplement.
+  Scripts handle their own errors with useful messages. State whether to
+  execute the script or read it. Document dependencies.
 - `assets/` — templates and data files consumed by the output.
+- `evals/` — trigger probes and task cases for later revision. The executing
+  agent should not load these during normal work.
 
-Never create an empty directory as scaffolding, and never bundle a file that `SKILL.md` does not
-reference.
+Never create an empty directory as scaffolding, and never bundle a file that
+`SKILL.md` does not mention. A candidate should rarely need more than three
+bundled modules besides `evals/`.
+
+## Freshness
+
+APIs, frameworks, and toolchains go stale. Version-incompatible guidance can
+lower success rates. For generated skills that depend on evolving interfaces:
+
+```markdown
+Dependencies: <tools, libraries, CLIs>
+Tested against: <versions, or "unverified">
+Freshness-sensitive: <what will rot>
+Last validated: <date, or empty for a new candidate>
+```
+
+For rapidly changing information, describe *how* to fetch and apply current
+docs rather than freezing today's docs into the skill.
+
+Set `metadata.freshness_sensitive: "true"` when stale instructions would actively
+mislead.
+
+## Evaluation files
+
+Write these *before* expanding the candidate beyond the minimum that could
+close the identified gap.
+
+`evals/triggers.md` — a compact probe set, not a 20-query lab protocol:
+
+- obvious positives
+- non-obvious positives (skill never named)
+- paraphrases and noisy/casual wording
+- the relevant subtask embedded in a larger task
+- hard-negative near-misses
+
+`evals/cases.md` — the failure the skill exists to prevent, a no-skill
+baseline expectation, and what "better" looks like. Include cost: extra steps
+and tokens count against the skill.
+
+Point to both files from `SKILL.md` with an explicit "load only when revising"
+note so the executor does not ingest them on every run.
 
 ## Anti-patterns
 
-- **Generic advice.** "Follow best practices", "handle errors appropriately", "consider edge
-  cases". If the sentence would be true of an unrelated task, it is filler.
-- **A task disguised as a skill.** If it only works for the request that prompted it, it is a plan.
-  Generalize the method or do not write it.
-- **A description that omits the trigger.** Saying what a skill does without saying when to use it
-  means it will not activate.
-- **First- or second-person descriptions.** "I can help you…" and "You can use this to…" both
-  degrade matching.
-- **Option menus.** Four libraries presented as equals leaves the decision unmade.
-- **Rigid directives without reasons.** Walls of ALL-CAPS MUST and NEVER read as noise and
-  generalize badly. Reserve emphatic phrasing for the few constraints that are genuinely absolute.
-- **Nested reference chains.** `SKILL.md` → `advanced.md` → `details.md` gets partially read. Link
-  everything from `SKILL.md`.
-- **Backslash paths.** `scripts\helper.py` breaks outside Windows.
-- **Restating the model's general knowledge.** Tokens spent on what the agent already knows crowd
-  out the content it does not.
+- **Generic advice.** If the sentence would be true of an unrelated task, delete it.
+- **A task disguised as a skill.** If it only works for this request, it is a plan.
+- **A description that omits trigger or exclusion.** It will under- or over-fire.
+- **First- or second-person descriptions.**
+- **Option menus.** One default plus a conditional escape hatch.
+- **Rigid directives without reasons.** Walls of MUST/NEVER read as noise.
+- **Motivational filler.** "Make no mistakes" is not a quality mechanism.
+- **Exhaustive master skills.** Split them.
+- **Teaching the model its own knowledge.**
+- **Prompt hacks without local evaluation.** Do not freeze "take a deep breath"
+  or similar into a persistent skill.
+- **Nested reference chains.** Link everything from `SKILL.md`.
+- **Backslash paths.**
+- **Verification theater.** Checks that add cost without changing outcomes.
+- **Self-certified quality.** Fluent prose is not evidence the skill works.
 
 ## Pre-flight checklist
 
-Before saving a generated skill:
+Before saving a generated candidate:
 
 ```
-- [ ] The directory name equals the frontmatter `name`, and the name is valid
-- [ ] The description states both what the skill does and when to use it, in third person
-- [ ] metadata.generator is set to autoskill
-- [ ] The skill covers exactly one coherent capability
-- [ ] Every instruction is followable without inventing the method
-- [ ] Domain specifics are concrete: real commands, names, standards, thresholds
-- [ ] The quality bar is stated in observable terms
-- [ ] Verification steps or review criteria are present where the domain allows them
-- [ ] Failure modes name real mistakes, with their early symptoms
-- [ ] It would help on a future task of the same kind, not just this one
-- [ ] Nothing in it restates what the model already knows
-- [ ] The body is under 500 lines; bundled files, if any, are referenced from SKILL.md
+- [ ] Directory name equals a valid frontmatter `name`
+- [ ] Description is a discovery contract: capability, trigger, implicit trigger, exclusion; third person
+- [ ] metadata.generator is autoskill; metadata.lifecycle is candidate
+- [ ] Exactly one coherent capability; no "and also"
+- [ ] Degree of freedom matches fragility
+- [ ] Purpose states a measurable behavioral change
+- [ ] Core workflow, decision branches, and one default are present
+- [ ] Verification is observable and risk-proportional
+- [ ] Deterministic work is a script or tool where practical
+- [ ] Domain specifics are real names, commands, standards, thresholds
+- [ ] No exhortations, option menus, or restated general knowledge
+- [ ] evals/triggers.md and evals/cases.md exist and are referenced
+- [ ] Body under 500 lines; bundled files, if any, are referenced from SKILL.md
+- [ ] Freshness notes exist when the domain can rot
 ```
 
-Then re-read the skill as though someone else wrote it and you had to do the work from it alone.
-If any step would leave you guessing, that step is the one to fix.
+Then re-read the skill as though someone else wrote it and you had to work from
+it alone. If a step would leave you guessing, that step is the one to fix. This
+is a form check, not a substitute for execution.
